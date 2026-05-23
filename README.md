@@ -4,6 +4,16 @@
 
 This ledger system implements the double entry accounting model with status-based journal authorization and balance tracking.
 
+## Key Features
+
+✅ **Double Entry Accounting**: Every transaction creates balanced debit/credit entries  
+✅ **Status-Based Authorization**: Control when transactions affect balances with preauth/authorized workflow  
+✅ **Three-Tier Balances**: Track current, pending, and available balances per account  
+✅ **Account Management**: Create and manage multiple accounts  
+✅ **Journal Tracking**: Organize transactions in journals with descriptions  
+✅ **Flexible Transaction Control**: Review and approve/reject transactions before applying them  
+✅ **Summary View**: Complete ledger overview with all accounts, journals, and balances
+
 ### Core Concepts
 
 #### Account
@@ -44,10 +54,26 @@ Also exposed:
 
 This app uses MongoDB for persistence.
 
-#### Start MongoDB locally
+#### Start MongoDB locally with Docker
 
 ```bash
 docker run --name etherfi-mongo -p 27017:27017 -d mongo:7
+```
+
+#### Run MongoDB on your local machine
+
+If you already have MongoDB installed locally, start it directly instead of using Docker.
+
+On macOS with Homebrew:
+
+```bash
+brew services start mongodb-community@7
+```
+
+Or use the MongoDB server binary directly:
+
+```bash
+mongod --dbpath /path/to/db --bind_ip 127.0.0.1 --port 27017
 ```
 
 #### Configure MongoDB connection
@@ -82,6 +108,22 @@ npm run start:dev
 ```
 
 The server starts at `http://localhost:3000`.
+Swagger is available at `http://localhost:3000/api`
+
+## Run the Test Suite
+
+Run all unit and e2e tests with:
+
+```bash
+npm test
+npm run test:e2e
+```
+
+For the full suite together:
+
+```bash
+npm test && npm run test:e2e
+```
 
 ## API Endpoints
 
