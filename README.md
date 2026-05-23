@@ -128,7 +128,7 @@ Content-Type: application/json
 
 {
   "accountId": "ACC_ASSET_1",
-  "name": "Etherfi Asset Account",
+  "name": "Etherfi Debt Account",
   "type": "asset",
   "openingBalance": 100000
 }
@@ -141,8 +141,8 @@ POST /ledger/accounts
 Content-Type: application/json
 
 {
-  "accountId": "ACC_LIABILITY_1",
-  "name": "Customer Payable",
+  "accountId": "ACC_SAFE_1",
+  "name": "Customer Safe Account",
   "type": "liability",
   "openingBalance": 0
 }
@@ -165,7 +165,7 @@ Content-Type: application/json
 
 {
   "journalId": "JNL_SPEND_001",
-  "accountId": "ACC_LIABILITY_1",
+  "accountId": "ACC_SAFE_1",
   "amount": 500
 }
 ```
@@ -173,7 +173,7 @@ Content-Type: application/json
 This creates a journal with two transactions:
 
 - debit `ACC_ASSET_1` for `500`
-- credit `ACC_LIABILITY_1` for `-500`
+- credit `ACC_SAFE_1` for `-500`
 
 ### 4. Authorize the Spend Journal
 
@@ -188,7 +188,7 @@ GET /ledger/balances/ACC_ASSET_1/info
 ```
 
 ```http
-GET /ledger/balances/ACC_LIABILITY_1/info
+GET /ledger/balances/ACC_SAFE_1/info
 ```
 
 ## Notes
