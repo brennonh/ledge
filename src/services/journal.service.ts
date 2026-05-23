@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { AccountService } from './account.service';
+import { ConfigService } from '../config/config.service';
 import {
   Journal,
   JournalDocument,
@@ -22,6 +23,7 @@ export class JournalService {
   constructor(
     @InjectModel(Journal.name) private journalModel: Model<JournalDocument>,
     private readonly accountService: AccountService,
+    private readonly configService: ConfigService,
   ) {}
 
   async createJournal(
@@ -30,6 +32,13 @@ export class JournalService {
     transactions: Transaction[] = [],
   ): Promise<Journal> {
     this.validateJournalTransactions(transactions);
+
+    const existing = await this.journalModel.findOne({ journalId }).lean();
+    if (existing) {
+      throw new BadRequestException(
+        `Journal with id ${journalId} already exists`,
+      );
+    }
 
     return this.journalModel.create({
       journalId,
@@ -136,5 +145,28 @@ export class JournalService {
           transactionType: transaction.amount >= 0 ? 'debit' : 'credit',
         })),
     );
+  }
+
+  /**
+   * Return the accountId of the first account with type 'asset', or null if none.
+   */
+  async getFirstAssetAccountId(): Promise<string | null> {
+    return this.accountService.findFirstAccountIdByType('asset');
+  }
+
+  /**
+   * Resolve the asset account id to use for Etherfi operations.
+   * Prefers the `ETHERFI_ASSET_ACCOUNT_ID` env var if set and valid,
+   * otherwise falls back to the first account with type 'asset'.
+   */
+  async getAssetAccountId(): Promise<string | null> {
+    const envId = this.configService.getEtherfiAssetAccountId();
+    if (envId) {
+      const acct = await this.accountService.getAccount(envId);
+      if (acct) return envId;
+      return null;
+    }
+
+    return this.getFirstAssetAccountId();
   }
 }

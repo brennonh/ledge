@@ -2,253 +2,200 @@
 
 ## Overview
 
-This ledger system implements the double entry accounting model with status-based journal authorization and three-tier balance tracking. The following components work together:
+This ledger system implements the double entry accounting model with status-based journal authorization and balance tracking.
 
-### Entities
+### Core Concepts
 
 #### Account
 
-- **accountId**: Unique identifier for the account
-- **name**: Name of the account
-
-Example: "ACC001" - "Cash Account"
+- `accountId`: Unique account identifier
+- `name`: Account display name
+- `type`: `asset` or `liability`
+- `openingBalance`: Optional starting balance
 
 #### Transaction
 
-- **amount**: Integer amount value
-- **accountId**: The account identifier this transaction belongs to
+- `amount`: Numeric value
+- `accountId`: Target account
 
-In double entry accounting, every transaction creates two entries (debit and credit).
+Every journal must contain balanced transactions: debits and credits must cancel out.
 
 #### Journal
 
-- **journalId**: Unique identifier for the journal
-- **description**: Description of the journal entry
-- **transactions**: Array of transactions associated with this journal
-- **status**: Journal state (`preauth`, `authorized`, or `rejected`)
-  - **preauth**: Initial status when journal is created. Transactions are recorded but balances are NOT updated.
-  - **authorized**: Journal is approved. All transactions are applied to account balances.
-  - **rejected**: Journal is declined. Pending transactions are discarded.
+- `journalId`: Unique identifier
+- `description`: Journal description
+- `transactions`: Debit/credit entries
+- `status`: `preauth`, `authorized`, or `rejected`
 
 #### Balance
 
-- **balanceId**: Unique identifier for the balance record
-- **accountId**: The account this balance belongs to
-- **currentBalance**: The authorized balance (only includes authorized transactions)
+- `balanceId`: Unique balance record ID
+- `accountId`: Linked account
+- `currentBalance`: Authorized balance
 
-Balance also provides three calculated values:
+Also exposed:
 
-- **currentBalance**: Stored balance reflecting only authorized transactions
-- **pendingBalance**: Sum of all transactions in preauth journals for this account
-- **availableBalance**: currentBalance - pendingBalance (funds available for new transactions)
+- `pendingBalance`: Sum of amounts in preauth journals for the account
+- `availableBalance`: `currentBalance - pendingBalance`
+
+## Setup
+
+### MongoDB
+
+This app uses MongoDB for persistence.
+
+#### Start MongoDB locally
+
+```bash
+docker run --name etherfi-mongo -p 27017:27017 -d mongo:7
+```
+
+#### Configure MongoDB connection
+
+By default the app connects to:
+
+```bash
+mongodb://localhost:27017/etherfi-ledger
+```
+
+You can override it with:
+
+```bash
+export MONGODB_URI='mongodb://localhost:27017/etherfi-ledger'
+```
+
+### Etherfi asset account config
+
+The spend flow requires an asset account id.
+
+```bash
+export ETHERFI_ASSET_ACCOUNT_ID=ACC_ASSET_1
+```
+
+If this env var is not set, the app will fall back to the first account with type `asset`.
+
+## Run the App
+
+```bash
+npm install
+npm run start:dev
+```
+
+The server starts at `http://localhost:3000`.
 
 ## API Endpoints
 
 ### Accounts
 
-- `POST /ledger/accounts` - Create a new account
-- `GET /ledger/accounts` - Get all accounts
-- `GET /ledger/accounts/:accountId` - Get a specific account
+- `POST /ledger/accounts` - create an account
+- `GET /ledger/accounts` - list all accounts
+- `GET /ledger/accounts/:accountId` - get an account with balance info
 
 ### Journals
 
-- `POST /ledger/journals` - Create a new journal (status: preauth)
-- `GET /ledger/journals` - Get all journals
-- `GET /ledger/journals/:journalId` - Get a specific journal
-- `GET /ledger/journals/status/:status` - Get journals by status (preauth, authorized, rejected)
-- `PUT /ledger/journals/:journalId/authorize` - Authorize journal and apply transactions to balances
-- `PUT /ledger/journals/:journalId/reject` - Reject journal and discard transactions
+- `POST /ledger/journals` - create a journal (`preauth`)
+- `GET /ledger/journals` - list all journals
+- `GET /ledger/journals/:journalId` - get a journal
+- `GET /ledger/journals/status/:status` - list journals by status
+- `PUT /ledger/journals/:journalId/authorize` - authorize a journal
+- `PUT /ledger/journals/:journalId/reject` - reject a journal
 
 ### Transactions
 
-
+- `GET /ledger/transactions/:accountId` - list authorized transactions for an account
 
 ### Balances
 
-- `GET /ledger/balances` - Get all balance records
-- `GET /ledger/balances/:accountId` - Get balance for specific account (current balance only)
-- `GET /ledger/balances-info/:accountId` - Get complete balance info with pending and available amounts
+- `GET /ledger/balances` - list all balances
+- `GET /ledger/balances/:accountId` - get the raw balance record for an account
+- `GET /ledger/balances/:accountId/info` - get current, pending, and available balances
 
-### Summary
+### Ledger Summary
 
-- `GET /ledger/summary` - Get complete ledger summary (accounts, journals, balances, and balance info)
+- `GET /ledger/summary` - get accounts, journals, balances, and balance info
+
+### Etherfi Spend
+
+- `POST /etherfi/spend` - create a spend journal that debits the configured asset account and credits the provided account
 
 ## Example Usage
 
-### 1. Create Accounts
+### 1. Create an Asset Account
 
-```json
+```http
 POST /ledger/accounts
+Content-Type: application/json
+
 {
-  "accountId": "ACC001",
-  "name": "Cash",
-  "type": "asset"
+  "accountId": "ACC_ASSET_1",
+  "name": "Etherfi Asset Account",
+  "type": "asset",
+  "openingBalance": 100000
 }
 ```
 
-```json
+### 2. Create a Liability Account
+
+```http
 POST /ledger/accounts
+Content-Type: application/json
+
 {
-  "accountId": "ACC002",
-  "name": "Expenses"
+  "accountId": "ACC_LIABILITY_1",
+  "name": "Customer Payable",
+  "type": "liability",
+  "openingBalance": 0
 }
 ```
 
-### 2. Create Balances
+### 3. Create a Spend Request
 
-```json
-POST /ledger/balances
-{
-  "balanceId": "BAL001",
-  "accountId": "ACC001",
-  "initialBalance": 1000
-}
-```
-
-```json
-POST /ledger/balances
-{
-  "balanceId": "BAL002",
-  "accountId": "ACC002",
-  "initialBalance": 0
-}
-```
-
-### 3. Create Journal (Status: preauth)
-
-```json
-POST /ledger/journals
-{
-  "journalId": "JNL001",
-  "description": "Daily transactions"
-}
-```
-
-Response:
-
-```json
-{
-  "journalId": "JNL001",
-  "description": "Daily transactions",
-  "transactions": [],
-  "status": "preauth"
-}
-```
-
-### 4. Add Transactions to Journal (Preauth)
-
-```json
-POST /ledger/transactions
-{
-  "journalId": "JNL001",
-  "amount": 100,
-  "debitAccountId": "ACC001",
-  "creditAccountId": "ACC002"
-}
-```
-
-At this point:
-
-- Transactions are recorded in the journal
-- Journal status is still `preauth`
-- **Balances are NOT updated yet**
-- Pending balance for ACC001 = +100
-- Available balance for ACC001 = 1000 - 100 = 900
-
-### 5. Check Balance Info (Before Authorization)
-
-```json
-GET /ledger/balances-info/ACC001
-```
-
-Response:
-
-```json
-{
-  "currentBalance": 1000,
-  "pendingBalance": 100,
-  "availableBalance": 900
-}
-```
-
-### 6. Authorize Journal
-
-```json
-PUT /ledger/journals/JNL001/authorize
-```
-
-Response:
-
-```json
-{
-  "message": "Journal JNL001 has been authorized"
-}
-```
-
-**After authorization:**
-
-- Journal status changes to `authorized`
-- Transactions are applied to account balances
-- Current balance for ACC001 = 900
-- Pending balance for ACC001 = 0 (no more preauth transactions)
-- Available balance for ACC001 = 900
-
-### 7. Check Balance Info (After Authorization)
-
-```json
-GET /ledger/balances-info/ACC001
-```
-
-Response:
-
-```json
-{
-  "currentBalance": 900,
-  "pendingBalance": 0,
-  "availableBalance": 900
-}
-```
-
-### Alternative: Reject Journal
-
-Instead of authorizing, you can reject:
-
-```json
-PUT /ledger/journals/JNL001/reject
-```
-
-Response:
-
-```json
-{
-  "message": "Journal JNL001 has been rejected"
-}
-```
-
-**After rejection:**
-
-- Journal status changes to `rejected`
-- Transactions are discarded
-- Account balances remain unchanged
-- Pending balance returns to 0
-
-## Key Features
-
-✅ **Double Entry Accounting**: Every transaction creates balanced debit/credit entries  
-✅ **Status-Based Authorization**: Control when transactions affect balances with preauth/authorized workflow  
-✅ **Three-Tier Balances**: Track current, pending, and available balances per account  
-✅ **Account Management**: Create and manage multiple accounts  
-✅ **Journal Tracking**: Organize transactions in journals with descriptions  
-✅ **Flexible Transaction Control**: Review and approve/reject transactions before applying them  
-✅ **Summary View**: Complete ledger overview with all accounts, journals, and balances
-
-## Running the Application
+Set the env var for the asset account and start the app:
 
 ```bash
+export ETHERFI_ASSET_ACCOUNT_ID=ACC_ASSET_1
 npm run start:dev
 ```
 
-The server will start on `http://localhost:3000`
+Then call:
+
+```http
+POST /etherfi/spend
+Content-Type: application/json
+
+{
+  "journalId": "JNL_SPEND_001",
+  "accountId": "ACC_LIABILITY_1",
+  "amount": 500
+}
+```
+
+This creates a journal with two transactions:
+
+- debit `ACC_ASSET_1` for `500`
+- credit `ACC_LIABILITY_1` for `-500`
+
+### 4. Authorize the Spend Journal
+
+```http
+PUT /ledger/journals/JNL_SPEND_001/authorize
+```
+
+### 5. Check Balance Info
+
+```http
+GET /ledger/balances/ACC_ASSET_1/info
+```
+
+```http
+GET /ledger/balances/ACC_LIABILITY_1/info
+```
+
+## Notes
+
+- `journalId` must be unique. Creating a journal with an existing `journalId` returns an error.
+- `accountId` must be unique for accounts.
+- Account responses include `currentBalance`, `pendingBalance`, and `availableBalance`.
 
 ## License
 

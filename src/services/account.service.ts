@@ -200,4 +200,13 @@ export class AccountService {
     }
     return result;
   }
+
+  /**
+   * Find the first account id for a given account type.
+   * Returns null if none found.
+   */
+  async findFirstAccountIdByType(type: AccountType): Promise<string | null> {
+    const acct = await this.accountModel.findOne({ type }).lean();
+    return acct ? acct.accountId : null;
+  }
 }
