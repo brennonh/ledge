@@ -20,6 +20,7 @@ export interface AuthorizedAccountTransaction {
   amount: number;
   accountId: string;
   transactionType: 'debit' | 'credit';
+  journalCreatedAt: Date;
 }
 
 @Injectable()
@@ -150,6 +151,7 @@ export class JournalService {
       }
 
       journal.status = 'authorized';
+      journal.updatedAt = new Date();
       await journal.save({ session });
 
       await session.commitTransaction();
@@ -178,6 +180,7 @@ export class JournalService {
         }
 
         journal.status = 'authorized';
+        journal.updatedAt = new Date();
         await journal.save();
       } else {
         throw error;
@@ -198,6 +201,7 @@ export class JournalService {
     }
 
     journal.status = 'rejected';
+    journal.updatedAt = new Date();
     await journal.save();
   }
 
@@ -221,6 +225,7 @@ export class JournalService {
           amount: transaction.amount,
           accountId: transaction.accountId,
           transactionType: transaction.amount >= 0 ? 'debit' : 'credit',
+          journalCreatedAt: journal.createdAt as Date,
         })),
     );
   }

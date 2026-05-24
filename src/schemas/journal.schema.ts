@@ -26,6 +26,12 @@ export class Journal {
     enum: ['preauth', 'authorized', 'rejected'],
   })
   status!: JournalStatus;
+
+  @Prop()
+  createdAt?: Date;
+
+  @Prop()
+  updatedAt?: Date;
 }
 
 export const JournalSchema = SchemaFactory.createForClass(Journal);

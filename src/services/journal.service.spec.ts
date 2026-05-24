@@ -133,7 +133,8 @@ describe('JournalService', () => {
         { accountId: 'ACC2', amount: -100 },
       ],
       save: mockSave,
-    };
+      updatedAt: new Date('2026-05-24T00:00:00.000Z'),
+    } as any;
 
     mockJournalModel.startSession.mockResolvedValue(mockSession);
     mockJournalModel.findOne.mockReturnValue({
@@ -152,6 +153,7 @@ describe('JournalService', () => {
       -100,
       mockSession,
     );
+    expect(journal.updatedAt).toBeInstanceOf(Date);
     expect(mockSave).toHaveBeenCalledWith({ session: mockSession });
     expect(mockSession.commitTransaction).toHaveBeenCalled();
   });
@@ -180,6 +182,37 @@ describe('JournalService', () => {
     expect(mockSession.abortTransaction).toHaveBeenCalled();
   });
 
+  it('returns journal createdAt on authorized account transaction responses', async () => {
+    const createdAt = new Date('2026-05-24T12:00:00.000Z');
+    const journal = {
+      journalId: 'JNL_TRANS',
+      description: 'Txn journal',
+      status: 'authorized',
+      createdAt,
+      transactions: [
+        { accountId: 'ACC1', amount: 100 },
+        { accountId: 'ACC2', amount: -100 },
+      ],
+    };
+
+    mockJournalModel.find.mockReturnValue({
+      lean: jest.fn().mockResolvedValue([journal]),
+    });
+
+    const result = await service.getAuthorizedTransactionsForAccount('ACC1');
+
+    expect(result).toEqual([
+      {
+        journalId: 'JNL_TRANS',
+        description: 'Txn journal',
+        amount: 100,
+        accountId: 'ACC1',
+        transactionType: 'debit',
+        journalCreatedAt: createdAt,
+      },
+    ]);
+  });
+
   it('rejects only preauth journals', async () => {
     const journal = {
       journalId: 'JNL_REJ',
@@ -193,6 +226,23 @@ describe('JournalService', () => {
       BadRequestException,
     );
     expect(journal.save).not.toHaveBeenCalled();
+  });
+
+  it('sets updatedAt when rejecting a preauth journal', async () => {
+    const saveMock = jest.fn().mockResolvedValue(undefined);
+    const journal = {
+      journalId: 'JNL_REJ',
+      status: 'preauth',
+      save: saveMock,
+      updatedAt: new Date('2026-05-24T00:00:00.000Z'),
+    } as any;
+
+    mockJournalModel.findOne.mockResolvedValue(journal);
+
+    await service.rejectJournal('JNL_REJ');
+
+    expect(journal.updatedAt).toBeInstanceOf(Date);
+    expect(saveMock).toHaveBeenCalled();
   });
 
   it('returns env asset account id when configured and valid', async () => {
