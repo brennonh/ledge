@@ -180,6 +180,21 @@ describe('JournalService', () => {
     expect(mockSession.abortTransaction).toHaveBeenCalled();
   });
 
+  it('rejects only preauth journals', async () => {
+    const journal = {
+      journalId: 'JNL_REJ',
+      status: 'authorized',
+      save: jest.fn(),
+    };
+
+    mockJournalModel.findOne.mockResolvedValue(journal);
+
+    await expect(service.rejectJournal('JNL_REJ')).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(journal.save).not.toHaveBeenCalled();
+  });
+
   it('returns env asset account id when configured and valid', async () => {
     mockConfigService.getEtherfiAssetAccountId.mockReturnValue('ACC_ASSET_1');
     mockAccountService.getAccount.mockResolvedValue({

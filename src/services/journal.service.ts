@@ -193,6 +193,10 @@ export class JournalService {
       throw new NotFoundException(`Journal with id ${journalId} not found`);
     }
 
+    if (journal.status !== 'preauth') {
+      throw new BadRequestException('Only preauth journals can be rejected');
+    }
+
     journal.status = 'rejected';
     await journal.save();
   }
