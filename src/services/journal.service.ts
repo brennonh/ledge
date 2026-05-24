@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, ClientSession } from 'mongoose';
 import { AccountService } from './account.service';
@@ -32,6 +36,7 @@ export class JournalService {
     transactions: Transaction[] = [],
   ): Promise<Journal> {
     this.validateJournalTransactions(transactions);
+    await this.validateJournalAccounts(transactions);
 
     const existing = await this.journalModel.findOne({ journalId }).lean();
     if (existing) {
@@ -54,6 +59,28 @@ export class JournalService {
 
   async getAllJournals(): Promise<Journal[]> {
     return this.journalModel.find().lean();
+  }
+
+  private async validateJournalAccounts(
+    transactions: Transaction[],
+  ): Promise<void> {
+    const accountIds = Array.from(
+      new Set(transactions.map((transaction) => transaction.accountId)),
+    );
+
+    const missingAccountIds: string[] = [];
+    for (const accountId of accountIds) {
+      const account = await this.accountService.getAccount(accountId);
+      if (!account) {
+        missingAccountIds.push(accountId);
+      }
+    }
+
+    if (missingAccountIds.length > 0) {
+      throw new BadRequestException(
+        `Referenced account(s) not found: ${missingAccountIds.join(', ')}`,
+      );
+    }
   }
 
   private validateJournalTransactions(transactions: Transaction[]): void {
@@ -103,7 +130,7 @@ export class JournalService {
         .session(session);
       if (!journal) {
         await session.abortTransaction();
-        throw new BadRequestException(`Journal with id ${journalId} not found`);
+        throw new NotFoundException(`Journal with id ${journalId} not found`);
       }
       if (journal.status !== 'preauth') {
         await session.abortTransaction();
@@ -132,7 +159,7 @@ export class JournalService {
       if (error instanceof Error && error.message.includes('Transaction')) {
         const journal = await this.journalModel.findOne({ journalId });
         if (!journal) {
-          return;
+          throw new NotFoundException(`Journal with id ${journalId} not found`);
         }
         if (journal.status !== 'preauth') {
           throw new BadRequestException(
@@ -163,7 +190,7 @@ export class JournalService {
   async rejectJournal(journalId: string): Promise<void> {
     const journal = await this.journalModel.findOne({ journalId });
     if (!journal) {
-      return;
+      throw new NotFoundException(`Journal with id ${journalId} not found`);
     }
 
     journal.status = 'rejected';

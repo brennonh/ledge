@@ -1,4 +1,11 @@
-import { Controller, Post, Get, Body, Param } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  NotFoundException,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
   AccountService,
@@ -51,7 +58,11 @@ export class AccountController {
   @Get(':accountId')
   async getAccount(
     @Param('accountId') accountId: string,
-  ): Promise<AccountWithBalance | null> {
-    return this.accountService.getAccount(accountId);
+  ): Promise<AccountWithBalance> {
+    const account = await this.accountService.getAccount(accountId);
+    if (!account) {
+      throw new NotFoundException(`Account with id ${accountId} not found`);
+    }
+    return account;
   }
 }

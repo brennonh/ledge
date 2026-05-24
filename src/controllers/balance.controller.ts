@@ -1,4 +1,11 @@
-import { Controller, Post, Get, Body, Param } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  NotFoundException,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AccountService } from '../services/account.service';
 import { Balance } from '../schemas/balance.schema';
@@ -36,13 +43,15 @@ export class BalanceController {
    * Retrieve a raw balance by account id.
    *
    * @param accountId Account identifier
-   * @returns Balance document or null
+   * @returns Balance document
    */
   @Get(':accountId')
-  async getBalance(
-    @Param('accountId') accountId: string,
-  ): Promise<Balance | null> {
-    return this.accountService.getBalance(accountId);
+  async getBalance(@Param('accountId') accountId: string): Promise<Balance> {
+    const balance = await this.accountService.getBalance(accountId);
+    if (!balance) {
+      throw new NotFoundException(`Balance for account ${accountId} not found`);
+    }
+    return balance;
   }
 
   /**

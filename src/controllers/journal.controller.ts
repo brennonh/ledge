@@ -1,4 +1,12 @@
-import { Controller, Post, Get, Body, Param, Put } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  Put,
+  NotFoundException,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { JournalStatus } from '../schemas/journal.schema';
 import { JournalService } from '../services/journal.service';
@@ -27,6 +35,12 @@ export class JournalController {
     return this.journalService.getAllJournals();
   }
 
+  /**
+   * Retrieve journals filtered by status.
+   *
+   * @param status Journal status filter
+   * @returns List of matching journals
+   */
   @Get('status/:status')
   async getJournalsByStatus(
     @Param('status') status: JournalStatus,
@@ -34,13 +48,27 @@ export class JournalController {
     return this.journalService.getJournalsByStatus(status);
   }
 
+  /**
+   * Retrieve a single journal by its unique ID.
+   *
+   * @param journalId Journal identifier
+   * @returns Journal document
+   */
   @Get(':journalId')
-  async getJournal(
-    @Param('journalId') journalId: string,
-  ): Promise<Journal | null> {
-    return this.journalService.getJournal(journalId);
+  async getJournal(@Param('journalId') journalId: string): Promise<Journal> {
+    const journal = await this.journalService.getJournal(journalId);
+    if (!journal) {
+      throw new NotFoundException(`Journal with id ${journalId} not found`);
+    }
+    return journal;
   }
 
+  /**
+   * Authorize a journal, posting its transactions to account balances.
+   *
+   * @param journalId Journal identifier
+   * @returns Confirmation message
+   */
   @Put(':journalId/authorize')
   async authorizeJournal(
     @Param('journalId') journalId: string,
@@ -49,6 +77,12 @@ export class JournalController {
     return { message: `Journal ${journalId} has been authorized` };
   }
 
+  /**
+   * Reject a journal, preventing it from being authorized.
+   *
+   * @param journalId Journal identifier
+   * @returns Confirmation message
+   */
   @Put(':journalId/reject')
   async rejectJournal(
     @Param('journalId') journalId: string,

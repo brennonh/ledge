@@ -41,6 +41,9 @@ describe('JournalService', () => {
 
   it('creates a balanced preauth journal', async () => {
     mockJournalModel.findOne.mockReturnValue(mockLeanQuery(null));
+    mockAccountService.getAccount.mockImplementation(async (accountId) => ({
+      accountId,
+    }));
     mockJournalModel.create.mockResolvedValue({
       journalId: 'JNL1',
       description: 'Test',
@@ -56,6 +59,8 @@ describe('JournalService', () => {
     expect(mockJournalModel.findOne).toHaveBeenCalledWith({
       journalId: 'JNL1',
     });
+    expect(mockAccountService.getAccount).toHaveBeenCalledWith('ACC1');
+    expect(mockAccountService.getAccount).toHaveBeenCalledWith('ACC2');
     expect(mockJournalModel.create).toHaveBeenCalledWith({
       journalId: 'JNL1',
       description: 'Test',
@@ -68,6 +73,21 @@ describe('JournalService', () => {
       transactions: [],
       status: 'preauth',
     });
+  });
+
+  it('rejects creation when referenced account does not exist', async () => {
+    mockJournalModel.findOne.mockReturnValue(mockLeanQuery(null));
+    mockAccountService.getAccount.mockImplementation(async (accountId) =>
+      accountId === 'ACC1' ? { accountId } : null,
+    );
+
+    await expect(
+      service.createJournal('JNL_MISSING', 'Missing account', [
+        new Transaction(100, 'ACC1'),
+        new Transaction(-100, 'ACC2'),
+      ]),
+    ).rejects.toThrow(BadRequestException);
+    expect(mockJournalModel.create).not.toHaveBeenCalled();
   });
 
   it('rejects unbalanced journal transactions', async () => {
