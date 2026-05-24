@@ -105,20 +105,6 @@ describe('JournalService', () => {
 
   it('authorizes only preauth journals and updates balances', async () => {
     const mockSave = jest.fn().mockResolvedValue(undefined);
-    const mockFindOne = jest.fn().mockReturnValue({
-      session: jest.fn().mockResolvedValue({
-        journalId: 'JNL_AUTH',
-        status: 'preauth',
-        transactions: [
-          { accountId: 'ACC1', amount: 100 },
-          { accountId: 'ACC2', amount: -100 },
-        ],
-        save: mockSave,
-      }),
-    });
-    mockJournalModel.findOne = mockFindOne;
-    mockJournalModel.startSession.mockResolvedValue(mockSession);
-
     const journal = {
       journalId: 'JNL_AUTH',
       status: 'preauth',
@@ -129,15 +115,10 @@ describe('JournalService', () => {
       save: mockSave,
     };
 
-    // Mock the session's query return
-    mockFindOne.mockReturnValue({
-      session: jest.fn().mockReturnValue(Promise.resolve(journal)),
+    mockJournalModel.startSession.mockResolvedValue(mockSession);
+    mockJournalModel.findOne.mockReturnValue({
+      session: jest.fn().mockResolvedValue(journal),
     });
-    // But actually make it return the journal directly
-    mockJournalModel.findOne.mockImplementation(() => ({
-      session: jest.fn().mockReturnThis(),
-      then: jest.fn((cb: any) => cb(journal)),
-    }));
 
     await service.authorizeJournal('JNL_AUTH');
 
@@ -153,6 +134,30 @@ describe('JournalService', () => {
     );
     expect(mockSave).toHaveBeenCalledWith({ session: mockSession });
     expect(mockSession.commitTransaction).toHaveBeenCalled();
+  });
+
+  it('throws when authorizing a non-preauth journal', async () => {
+    const mockSave = jest.fn().mockResolvedValue(undefined);
+    const journal = {
+      journalId: 'JNL_AUTH',
+      status: 'authorized',
+      transactions: [
+        { accountId: 'ACC1', amount: 100 },
+        { accountId: 'ACC2', amount: -100 },
+      ],
+      save: mockSave,
+    };
+
+    mockJournalModel.startSession.mockResolvedValue(mockSession);
+    mockJournalModel.findOne.mockReturnValue({
+      session: jest.fn().mockResolvedValue(journal),
+    });
+
+    await expect(service.authorizeJournal('JNL_AUTH')).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(mockAccountService.updateBalance).not.toHaveBeenCalled();
+    expect(mockSession.abortTransaction).toHaveBeenCalled();
   });
 
   it('returns env asset account id when configured and valid', async () => {

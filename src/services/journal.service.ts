@@ -101,9 +101,15 @@ export class JournalService {
       const journal = await this.journalModel
         .findOne({ journalId })
         .session(session);
-      if (!journal || journal.status !== 'preauth') {
+      if (!journal) {
         await session.abortTransaction();
-        return;
+        throw new BadRequestException(`Journal with id ${journalId} not found`);
+      }
+      if (journal.status !== 'preauth') {
+        await session.abortTransaction();
+        throw new BadRequestException(
+          'Only preauth journals can be authorized',
+        );
       }
 
       const balanceUpdates: Record<string, number> = {};
@@ -125,8 +131,13 @@ export class JournalService {
       // If transactions aren't supported (e.g., in-memory MongoDB), fall back to non-transactional updates
       if (error instanceof Error && error.message.includes('Transaction')) {
         const journal = await this.journalModel.findOne({ journalId });
-        if (!journal || journal.status !== 'preauth') {
+        if (!journal) {
           return;
+        }
+        if (journal.status !== 'preauth') {
+          throw new BadRequestException(
+            'Only preauth journals can be authorized',
+          );
         }
 
         const balanceUpdates: Record<string, number> = {};
