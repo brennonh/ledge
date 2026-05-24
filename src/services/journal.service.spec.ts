@@ -5,13 +5,21 @@ import { Transaction } from '../entities/transaction.entity';
 
 describe('JournalService', () => {
   let service: JournalService;
+  const mockSession: any = {
+    startTransaction: jest.fn(),
+    commitTransaction: jest.fn(),
+    abortTransaction: jest.fn(),
+    endSession: jest.fn(),
+  };
   const mockJournalModel: any = {
     findOne: jest.fn(),
     find: jest.fn(),
     create: jest.fn(),
+    startSession: jest.fn().mockResolvedValue(mockSession),
   };
   const mockLeanQuery = (value: any) => ({
     lean: jest.fn().mockResolvedValue(value),
+    session: jest.fn().mockReturnThis(),
   });
   const mockAccountService: any = {
     updateBalance: jest.fn(),
@@ -96,8 +104,22 @@ describe('JournalService', () => {
   });
 
   it('authorizes only preauth journals and updates balances', async () => {
-    const mockSave = jest.fn();
-    mockJournalModel.findOne.mockResolvedValue({
+    const mockSave = jest.fn().mockResolvedValue(undefined);
+    const mockFindOne = jest.fn().mockReturnValue({
+      session: jest.fn().mockResolvedValue({
+        journalId: 'JNL_AUTH',
+        status: 'preauth',
+        transactions: [
+          { accountId: 'ACC1', amount: 100 },
+          { accountId: 'ACC2', amount: -100 },
+        ],
+        save: mockSave,
+      }),
+    });
+    mockJournalModel.findOne = mockFindOne;
+    mockJournalModel.startSession.mockResolvedValue(mockSession);
+
+    const journal = {
       journalId: 'JNL_AUTH',
       status: 'preauth',
       transactions: [
@@ -105,13 +127,32 @@ describe('JournalService', () => {
         { accountId: 'ACC2', amount: -100 },
       ],
       save: mockSave,
+    };
+
+    // Mock the session's query return
+    mockFindOne.mockReturnValue({
+      session: jest.fn().mockReturnValue(Promise.resolve(journal)),
     });
+    // But actually make it return the journal directly
+    mockJournalModel.findOne.mockImplementation(() => ({
+      session: jest.fn().mockReturnThis(),
+      then: jest.fn((cb: any) => cb(journal)),
+    }));
 
     await service.authorizeJournal('JNL_AUTH');
 
-    expect(mockAccountService.updateBalance).toHaveBeenCalledWith('ACC1', 100);
-    expect(mockAccountService.updateBalance).toHaveBeenCalledWith('ACC2', -100);
-    expect(mockSave).toHaveBeenCalled();
+    expect(mockAccountService.updateBalance).toHaveBeenCalledWith(
+      'ACC1',
+      100,
+      mockSession,
+    );
+    expect(mockAccountService.updateBalance).toHaveBeenCalledWith(
+      'ACC2',
+      -100,
+      mockSession,
+    );
+    expect(mockSave).toHaveBeenCalledWith({ session: mockSession });
+    expect(mockSession.commitTransaction).toHaveBeenCalled();
   });
 
   it('returns env asset account id when configured and valid', async () => {

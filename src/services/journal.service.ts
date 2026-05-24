@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, ClientSession } from 'mongoose';
 import { AccountService } from './account.service';
 import { ConfigService } from '../config/config.service';
 import {
@@ -94,23 +94,59 @@ export class JournalService {
   }
 
   async authorizeJournal(journalId: string): Promise<void> {
-    const journal = await this.journalModel.findOne({ journalId });
-    if (!journal || journal.status !== 'preauth') {
-      return;
-    }
+    const session: ClientSession = await this.journalModel.startSession();
+    session.startTransaction();
 
-    const balanceUpdates: Record<string, number> = {};
-    for (const transaction of journal.transactions) {
-      balanceUpdates[transaction.accountId] =
-        (balanceUpdates[transaction.accountId] ?? 0) + transaction.amount;
-    }
+    try {
+      const journal = await this.journalModel
+        .findOne({ journalId })
+        .session(session);
+      if (!journal || journal.status !== 'preauth') {
+        await session.abortTransaction();
+        return;
+      }
 
-    for (const [accountId, amount] of Object.entries(balanceUpdates)) {
-      await this.accountService.updateBalance(accountId, amount);
-    }
+      const balanceUpdates: Record<string, number> = {};
+      for (const transaction of journal.transactions) {
+        balanceUpdates[transaction.accountId] =
+          (balanceUpdates[transaction.accountId] ?? 0) + transaction.amount;
+      }
 
-    journal.status = 'authorized';
-    await journal.save();
+      for (const [accountId, amount] of Object.entries(balanceUpdates)) {
+        await this.accountService.updateBalance(accountId, amount, session);
+      }
+
+      journal.status = 'authorized';
+      await journal.save({ session });
+
+      await session.commitTransaction();
+    } catch (error) {
+      await session.abortTransaction();
+      // If transactions aren't supported (e.g., in-memory MongoDB), fall back to non-transactional updates
+      if (error instanceof Error && error.message.includes('Transaction')) {
+        const journal = await this.journalModel.findOne({ journalId });
+        if (!journal || journal.status !== 'preauth') {
+          return;
+        }
+
+        const balanceUpdates: Record<string, number> = {};
+        for (const transaction of journal.transactions) {
+          balanceUpdates[transaction.accountId] =
+            (balanceUpdates[transaction.accountId] ?? 0) + transaction.amount;
+        }
+
+        for (const [accountId, amount] of Object.entries(balanceUpdates)) {
+          await this.accountService.updateBalance(accountId, amount);
+        }
+
+        journal.status = 'authorized';
+        await journal.save();
+      } else {
+        throw error;
+      }
+    } finally {
+      await session.endSession();
+    }
   }
 
   async rejectJournal(journalId: string): Promise<void> {

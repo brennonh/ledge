@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, ClientSession } from 'mongoose';
 import {
   Account,
   AccountDocument,
@@ -163,15 +163,21 @@ export class AccountService {
 
   /**
    * Increase or decrease an account balance by a given amount.
+   * Optionally accepts a Mongoose session for atomic transactions.
    *
    * @param accountId Account identifier
    * @param amount Amount to update the balance by
+   * @param session Optional Mongoose session for transactions
    */
-  async updateBalance(accountId: string, amount: number): Promise<void> {
+  async updateBalance(
+    accountId: string,
+    amount: number,
+    session?: ClientSession,
+  ): Promise<void> {
     await this.balanceModel.findOneAndUpdate(
       { accountId },
       { $inc: { currentBalance: amount } },
-      { new: true },
+      { new: true, session },
     );
   }
 
